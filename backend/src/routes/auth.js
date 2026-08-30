@@ -112,4 +112,22 @@ router.post(
   }
 );
 
+// GET /me
+// Returns current authenticated user profile
+router.get('/me', require('../middleware/auth').authenticate, async (req, res, next) => {
+  try {
+    const user = await userModel.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    const { password_hash, ...userWithoutPassword } = user;
+    res.json({
+      success: true,
+      data: { user: userWithoutPassword }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
