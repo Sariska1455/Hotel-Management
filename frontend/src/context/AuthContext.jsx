@@ -36,6 +36,19 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
+  // Helper to check if error is DB connection / network failure
+  const isDbOrNetworkError = (err) => {
+    if (!err.response || err.code === 'ERR_NETWORK' || err.response?.status === 503) {
+      return true;
+    }
+    const errorMsg = err.response?.data?.error || '';
+    return (
+      errorMsg.includes('ETIMEDOUT') ||
+      errorMsg.includes('password authentication failed') ||
+      errorMsg.includes('Database connection error')
+    );
+  };
+
   // Login action with API call + graceful local fallback for offline/demo testing
   const login = async (email, password) => {
     try {
@@ -48,8 +61,8 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(userData));
       return userData;
     } catch (err) {
-      // If API server or DB connection fails, check for demo credentials fallback
-      if (!err.response || err.code === 'ERR_NETWORK') {
+      // If API server, DB host error (503), or network fails, fallback to demo mode
+      if (isDbOrNetworkError(err)) {
         const isManager = email.toLowerCase().includes('manager');
         const demoUser = {
           id: isManager ? 1 : 2,
@@ -80,7 +93,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('user', JSON.stringify(userData));
       return userData;
     } catch (err) {
-      if (!err.response || err.code === 'ERR_NETWORK') {
+      if (isDbOrNetworkError(err)) {
         const demoUser = {
           id: Date.now(),
           name: name,
