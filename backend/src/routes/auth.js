@@ -130,4 +130,17 @@ router.get('/me', require('../middleware/auth').authenticate, async (req, res, n
   }
 });
 
+// GET /waiters
+// Returns all users with role 'waiter' (for collaborator dropdowns, filters etc.)
+router.get('/waiters', require('../middleware/auth').authenticate, async (req, res, next) => {
+  try {
+    const waiters = await userModel.getAllWaiters();
+    // Strip password hashes before sending
+    const safe = waiters.map(({ password_hash, ...w }) => w);
+    res.json({ success: true, data: safe });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;

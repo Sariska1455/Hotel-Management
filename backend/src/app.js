@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/auth');
 const menuRoutes = require('./routes/menu');
+const orderRoutes = require('./routes/orders');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -24,6 +25,7 @@ app.use((req, res, next) => {
 // Mount our routes
 app.use('/api/auth', authRoutes);
 app.use('/api/menu-items', menuRoutes);
+app.use('/api/orders', orderRoutes);
 
 // Handle 404 Not Found for undefined routes
 app.use((req, res, next) => {
