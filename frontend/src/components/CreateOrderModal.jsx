@@ -33,7 +33,7 @@ const CreateOrderModal = ({ onClose, onCreated }) => {
     menuService.getMenuItems({ includeArchived: false }).then(items => {
       setMenuItems(items.filter(i => i.is_available && !i.is_archived));
       setMenuLoading(false);
-    });
+    }).catch(() => setMenuLoading(false));
   }, []);
 
   const addLine = (item) => {
@@ -88,16 +88,15 @@ const CreateOrderModal = ({ onClose, onCreated }) => {
     }
     setLoading(true);
     try {
-      const created = await orderService.createOrder({
+      await orderService.createOrder({
         tableNumber,
         notes,
         menuLines: selectedLines,
-        currentUser: user,
       });
-      onCreated(created);
+      onCreated();
       onClose();
     } catch (err) {
-      setError(err.message || 'Failed to create order');
+      setError(err.response?.data?.error || err.message || 'Failed to create order');
     } finally {
       setLoading(false);
     }

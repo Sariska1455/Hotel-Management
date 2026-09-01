@@ -11,7 +11,7 @@ import {
 import {
   Clock, ShoppingBag, CheckCircle, IndianRupee,
   TrendingUp, Users, Shield, UserCheck, BarChart2,
-  RefreshCw,
+  RefreshCw, Crown,
 } from 'lucide-react';
 
 const formatINR = (val) =>
@@ -63,7 +63,7 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const DashboardPage = () => {
-  const { user, isManager } = useAuth();
+  const { user, isManager, isAdmin } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [chartType, setChartType] = useState('orders'); // 'orders' | 'revenue'
@@ -88,11 +88,19 @@ const DashboardPage = () => {
       <div className="page-header">
         <div>
           <div className="page-eyebrow">
-            {isManager ? <><Shield size={14} /> Manager View</> : <><UserCheck size={14} /> Waiter View</>}
+            {isAdmin ? (
+              <><Crown size={14} color="#34d399" /> Owner / Admin View</>
+            ) : isManager ? (
+              <><Shield size={14} /> Manager View</>
+            ) : (
+              <><UserCheck size={14} /> Waiter View</>
+            )}
           </div>
           <h1 className="page-title">Welcome back, {user?.name?.split(' ')[0]}! 👋</h1>
           <p className="page-subtitle">
-            {isManager
+            {isAdmin
+              ? 'Owner overview — provision staff credentials, oversee menu items and all restaurant orders.'
+              : isManager
               ? 'Full restaurant overview — orders, revenue, and kitchen performance.'
               : 'Your live floor queue and today\'s highlights.'}
           </p>

@@ -73,6 +73,7 @@ CREATE TABLE menu_items (
   id            SERIAL PRIMARY KEY,
   name          VARCHAR(255) NOT NULL,
   description   TEXT,
+  category      VARCHAR(100) NOT NULL DEFAULT 'Mains',
   price         DECIMAL(10, 2) NOT NULL CHECK(price >= 0),
   is_available  BOOLEAN NOT NULL DEFAULT true,
   is_archived   BOOLEAN NOT NULL DEFAULT false,

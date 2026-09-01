@@ -11,6 +11,7 @@ import OrdersPage from './pages/OrdersPage';
 import OrderDetailPage from './pages/OrderDetailPage';
 import AlertsPanel from './pages/AlertsPanel';
 import MenuManager from './components/MenuManager';
+import StaffManagementPage from './pages/StaffManagementPage';
 
 // Wrap any page in layout + protection
 const LayoutPage = ({ children }) => (
@@ -33,6 +34,7 @@ function App() {
           <Route path="/orders/:id" element={<LayoutPage><OrderDetailPage /></LayoutPage>} />
           <Route path="/alerts" element={<LayoutPage><AlertsPanel /></LayoutPage>} />
           <Route path="/menu" element={<LayoutPage><MenuManager /></LayoutPage>} />
+          <Route path="/staff" element={<LayoutPage><StaffManagementPage /></LayoutPage>} />
 
           {/* Redirects */}
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

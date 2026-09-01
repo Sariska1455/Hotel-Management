@@ -36,6 +36,69 @@ const parseIntParam = (value, label) => {
 };
 
 // ---------------------------------------------------------------------------
+// GET /api/orders — List orders with search, filters, sort, pagination (Goal 6)
+// ---------------------------------------------------------------------------
+router.get('/', authenticate, async (req, res, next) => {
+  try {
+    const {
+      page = 1,
+      pageSize = 10,
+      search = '',
+      status = '',
+      waiterId = '',
+      date = '',
+      sortBy = 'createdAt',
+      sortDir = 'desc',
+    } = req.query;
+
+    const result = await orderModel.getOrders({
+      page: parseInt(page, 10),
+      pageSize: parseInt(pageSize, 10),
+      search,
+      status,
+      waiterId,
+      date,
+      sortBy,
+      sortDir,
+      userRole: req.user.role,
+      userId: req.user.id,
+    });
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/orders/export/csv — Export today's orders as CSV (Goal 7)
+// ---------------------------------------------------------------------------
+router.get('/export/csv', authenticate, async (req, res, next) => {
+  try {
+    const rows = await orderModel.getOrdersForCSV();
+
+    const headers = ['Order ID', 'Table', 'Status', 'Waiter', 'Lines', 'Total (INR)', 'Placed At'];
+    const csvRows = rows.map(r => [
+      r.orderId,
+      r.tableNumber,
+      r.status,
+      r.waiter,
+      r.lines,
+      r.total,
+      r.placedAt,
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+
+    const csv = [headers.map(h => `"${h}"`).join(','), ...csvRows].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=orders-${new Date().toISOString().slice(0, 10)}.csv`);
+    res.send(csv);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/orders — Create order
 // ---------------------------------------------------------------------------
 router.post(

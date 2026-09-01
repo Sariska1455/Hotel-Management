@@ -1,9 +1,13 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
 const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
 const menuRoutes = require('./routes/menu');
 const orderRoutes = require('./routes/orders');
+const dashboardRoutes = require('./routes/dashboard');
+const alertRoutes = require('./routes/alerts');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -24,11 +28,27 @@ app.use((req, res, next) => {
 
 // Mount our routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/menu-items', menuRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/alerts', alertRoutes);
 
-// Handle 404 Not Found for undefined routes
-app.use((req, res, next) => {
+// In production, serve the built Vite frontend if dist folder exists
+const fs = require('fs');
+const frontendDist = path.join(__dirname, '../../frontend/dist');
+
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  // Express 5 requires named wildcards; this form also matches the root path.
+  app.get('/{*splat}', (req, res, next) => {
+    if (req.url.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
+
+// Handle 404 Not Found for undefined API routes
+app.use('/api', (req, res, next) => {
   res.status(404).json({ success: false, error: 'Route not found' });
 });
 

@@ -1,13 +1,11 @@
 // ============================================================================
-// VoidLineModal — Void an order line with required reason
+// VoidLineModal — Void an order line with required reason (Goal 4)
 // ============================================================================
 import { useState } from 'react';
 import { X, AlertTriangle, Trash2 } from 'lucide-react';
 import { orderService } from '../services/orderService';
-import { useAuth } from '../context/AuthContext';
 
 const VoidLineModal = ({ orderId, line, onClose, onVoided }) => {
-  const { user } = useAuth();
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,11 +17,11 @@ const VoidLineModal = ({ orderId, line, onClose, onVoided }) => {
     }
     setLoading(true);
     try {
-      const updated = await orderService.voidLine(orderId, line.id, reason, user);
+      const updated = await orderService.voidLine(orderId, line.id, reason);
       onVoided(updated);
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setLoading(false);
     }

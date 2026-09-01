@@ -6,6 +6,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { orderService } from '../services/orderService';
 import { menuService } from '../services/menuService';
+import api from '../services/api';
 import StatusBadge from '../components/StatusBadge';
 import VoidLineModal from '../components/VoidLineModal';
 import {
@@ -22,13 +23,6 @@ const formatTime = (iso) => {
   const d = new Date(iso);
   return d.toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
-
-const DEMO_WAITERS = [
-  { id: 1, name: 'Alice Manager', role: 'manager' },
-  { id: 2, name: 'Bob Waiter', role: 'waiter' },
-  { id: 3, name: 'Carol Waiter', role: 'waiter' },
-  { id: 4, name: 'David Waiter', role: 'waiter' },
-];
 
 const TimelineIcon = ({ type }) => {
   switch (type) {
@@ -108,6 +102,7 @@ const OrderDetailPage = () => {
   // Collaborator state
   const [showAddCollab, setShowAddCollab] = useState(false);
   const [collabWaiterId, setCollabWaiterId] = useState('');
+  const [waiters, setWaiters] = useState([]);
 
   // Note state
   const [showAddNote, setShowAddNote] = useState(false);
@@ -118,6 +113,10 @@ const OrderDetailPage = () => {
     menuService.getMenuItems({ includeArchived: false }).then(items => {
       setMenuItems(items.filter(i => i.is_available));
     });
+    // Fetch real waiters from API
+    api.get('/auth/waiters').then(res => {
+      setWaiters(res.data.data || []);
+    }).catch(() => {});
   }, [id]);
 
   const loadOrder = async () => {
@@ -126,7 +125,7 @@ const OrderDetailPage = () => {
       const o = await orderService.getOrderById(id);
       setOrder(o);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setLoading(false);
     }
@@ -144,10 +143,10 @@ const OrderDetailPage = () => {
     setActionLoading(true);
     setError('');
     try {
-      const updated = await orderService.advanceStatus(order.id, newStatus, user);
+      const updated = await orderService.advanceStatus(order.id, newStatus);
       setOrder(updated);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setActionLoading(false);
     }
@@ -161,18 +160,16 @@ const OrderDetailPage = () => {
     try {
       const updated = await orderService.addLine(order.id, {
         menuItemId: item.id,
-        menuItemName: item.name,
         quantity: Number(addLineQty),
         specialInstructions: addLineNote,
-        price: item.price,
-      }, user);
+      });
       setOrder(updated);
       setShowAddLine(false);
       setAddLineItem('');
       setAddLineQty(1);
       setAddLineNote('');
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setActionLoading(false);
     }
@@ -180,16 +177,14 @@ const OrderDetailPage = () => {
 
   const handleAddCollab = async () => {
     if (!collabWaiterId) return;
-    const waiter = DEMO_WAITERS.find(w => String(w.id) === String(collabWaiterId));
-    if (!waiter) return;
     setActionLoading(true);
     try {
-      const updated = await orderService.addCollaborator(order.id, { id: waiter.id, name: waiter.name }, user);
-      setOrder({ ...updated, total: order.total });
+      const updated = await orderService.addCollaborator(order.id, parseInt(collabWaiterId, 10));
+      setOrder(updated);
       setShowAddCollab(false);
       setCollabWaiterId('');
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setActionLoading(false);
     }
@@ -198,10 +193,10 @@ const OrderDetailPage = () => {
   const handleRemoveCollab = async (collabId) => {
     setActionLoading(true);
     try {
-      const updated = await orderService.removeCollaborator(order.id, collabId, user);
-      setOrder({ ...updated, total: order.total });
+      const updated = await orderService.removeCollaborator(order.id, collabId);
+      setOrder(updated);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setActionLoading(false);
     }
@@ -211,12 +206,12 @@ const OrderDetailPage = () => {
     if (!noteText.trim()) return;
     setActionLoading(true);
     try {
-      const updated = await orderService.addNote(order.id, noteText, user);
-      setOrder({ ...updated, total: order.total });
+      const updated = await orderService.addNote(order.id, noteText);
+      setOrder(updated);
       setShowAddNote(false);
       setNoteText('');
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setActionLoading(false);
     }
@@ -225,10 +220,10 @@ const OrderDetailPage = () => {
   const handleArchive = async () => {
     setActionLoading(true);
     try {
-      await orderService.archiveOrder(order.id, !order.archived, user);
-      setOrder(prev => ({ ...prev, archived: !prev.archived }));
+      const updated = await orderService.archiveOrder(order.id, !order.archived);
+      setOrder(updated);
     } catch (err) {
-      setError(err.message);
+      setError(err.response?.data?.error || err.message);
     } finally {
       setActionLoading(false);
     }
@@ -251,6 +246,7 @@ const OrderDetailPage = () => {
         <div className="empty-state">
           <AlertTriangle size={40} />
           <h3>Order Not Found</h3>
+          {error && <p style={{ color: '#f87171' }}>{error}</p>}
           <button className="btn-primary" onClick={() => navigate('/orders')}>Back to Orders</button>
         </div>
       </div>
@@ -428,7 +424,7 @@ const OrderDetailPage = () => {
                   style={{ paddingLeft: '14px', marginBottom: '8px' }}
                 >
                   <option value="">Select waiter...</option>
-                  {DEMO_WAITERS
+                  {waiters
                     .filter(w => w.id !== order.primaryWaiterId && !order.collaborators?.some(c => c.id === w.id))
                     .map(w => <option key={w.id} value={w.id}>{w.name} ({w.role})</option>)}
                 </select>

@@ -31,7 +31,9 @@ const authenticate = (req, res, next) => {
 // specific actions (like creating users) may be restricted to certain roles (authorization).
 const authorize = (...roles) => {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    // Admin (Owner) automatically inherits permissions for any manager-level routes
+    const effectiveRoles = roles.includes('manager') ? [...roles, 'admin'] : roles;
+    if (!req.user || !effectiveRoles.includes(req.user.role)) {
       return res.status(403).json({ success: false, error: 'Forbidden. You do not have the required permissions.' });
     }
     next();

@@ -16,19 +16,25 @@ import {
   Utensils,
   Menu,
   X,
+  Crown,
+  Users,
   ChevronRight,
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
-  const { user, isManager, logout } = useAuth();
+  const { user, isManager, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const [alertCount, setAlertCount] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const refresh = () => {
-      const slowOrders = orderService.getSlowOrders(30);
-      setAlertCount(slowOrders.length);
+    const refresh = async () => {
+      try {
+        const alerts = await orderService.getSlowOrders();
+        setAlertCount(alerts.length);
+      } catch (err) {
+        // Silently fail — don't block layout rendering
+      }
     };
     refresh();
     const interval = setInterval(refresh, 30000);
@@ -44,6 +50,7 @@ const Layout = ({ children }) => {
     { to: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
     { to: '/orders', label: 'Orders', icon: <ClipboardList size={18} /> },
     { to: '/menu', label: 'Menu & Dishes', icon: <BookOpen size={18} /> },
+    ...(isAdmin ? [{ to: '/staff', label: 'Staff Management', icon: <Users size={18} /> }] : []),
   ];
 
   return (
@@ -71,14 +78,28 @@ const Layout = ({ children }) => {
 
         {/* User profile */}
         <div className="sidebar-profile">
-          <div className="profile-avatar">
+          <div className="profile-avatar" style={isAdmin ? { background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' } : {}}>
             {user?.name?.charAt(0)?.toUpperCase() || 'U'}
           </div>
           <div className="profile-info">
             <div className="profile-name">{user?.name || 'User'}</div>
             <div className="profile-role">
-              {isManager ? <Shield size={11} /> : <UserCheck size={11} />}
-              <span>{isManager ? 'Manager' : 'Waiter'}</span>
+              {isAdmin ? (
+                <>
+                  <Crown size={11} color="#34d399" />
+                  <span style={{ color: '#34d399' }}>Owner / Admin</span>
+                </>
+              ) : isManager ? (
+                <>
+                  <Shield size={11} color="#c084fc" />
+                  <span style={{ color: '#c084fc' }}>Manager</span>
+                </>
+              ) : (
+                <>
+                  <UserCheck size={11} color="#fbbf24" />
+                  <span style={{ color: '#fbbf24' }}>Waiter</span>
+                </>
+              )}
             </div>
           </div>
         </div>

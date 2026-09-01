@@ -4,7 +4,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,8 +14,7 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    // Only attach if it's a real token (not demo token)
-    if (token && !token.startsWith('demo-jwt-token')) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -25,24 +24,18 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor — handle 401s without disrupting demo mode
+// Response Interceptor — handle 401s (expired tokens)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    const token = localStorage.getItem('token');
-    
-    // Only trigger auto-logout redirect if it's a real backend token that expired/failed
     if (
-      error.response && 
-      error.response.status === 401 && 
-      token && 
-      !token.startsWith('demo-jwt-token')
+      error.response &&
+      error.response.status === 401 &&
+      window.location.pathname !== '/login'
     ) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }

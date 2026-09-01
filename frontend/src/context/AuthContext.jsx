@@ -36,82 +36,19 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // Helper to check if error is DB connection / network failure
-  const isDbOrNetworkError = (err) => {
-    if (!err.response || err.code === 'ERR_NETWORK' || err.response?.status === 503) {
-      return true;
-    }
-    const errorMsg = err.response?.data?.error || '';
-    return (
-      errorMsg.includes('ETIMEDOUT') ||
-      errorMsg.includes('password authentication failed') ||
-      errorMsg.includes('Database connection error')
-    );
-  };
-
-  // Login action with API call + graceful local fallback for offline/demo testing
+  // Login — calls real backend API
   const login = async (email, password) => {
-    try {
-      const response = await api.post('/auth/login', { email, password });
-      const { token: newToken, user: userData } = response.data.data;
-      
-      setToken(newToken);
-      setUser(userData);
-      localStorage.setItem('token', newToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-      return userData;
-    } catch (err) {
-      // If API server, DB host error (503), or network fails, fallback to demo mode
-      if (isDbOrNetworkError(err)) {
-        const isManager = email.toLowerCase().includes('manager');
-        const demoUser = {
-          id: isManager ? 1 : 2,
-          name: isManager ? 'Alice Manager (Demo)' : 'Bob Waiter (Demo)',
-          email: email,
-          role: isManager ? 'manager' : 'waiter'
-        };
-        const demoToken = 'demo-jwt-token-' + Date.now();
-        setToken(demoToken);
-        setUser(demoUser);
-        localStorage.setItem('token', demoToken);
-        localStorage.setItem('user', JSON.stringify(demoUser));
-        return demoUser;
-      }
-      throw err;
-    }
+    const response = await api.post('/auth/login', { email, password });
+    const { token: newToken, user: userData } = response.data.data;
+    
+    setToken(newToken);
+    setUser(userData);
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(userData));
+    return userData;
   };
 
-  // Register action with API call + graceful local fallback
-  const register = async (email, password, name, role) => {
-    try {
-      const response = await api.post('/auth/register', { email, password, name, role });
-      const { token: newToken, user: userData } = response.data.data;
-      
-      setToken(newToken);
-      setUser(userData);
-      localStorage.setItem('token', newToken);
-      localStorage.setItem('user', JSON.stringify(userData));
-      return userData;
-    } catch (err) {
-      if (isDbOrNetworkError(err)) {
-        const demoUser = {
-          id: Date.now(),
-          name: name,
-          email: email,
-          role: role
-        };
-        const demoToken = 'demo-jwt-token-' + Date.now();
-        setToken(demoToken);
-        setUser(demoUser);
-        localStorage.setItem('token', demoToken);
-        localStorage.setItem('user', JSON.stringify(demoUser));
-        return demoUser;
-      }
-      throw err;
-    }
-  };
-
-  // Logout action
+  // Logout
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -120,7 +57,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isAuthenticated = !!token;
-  const isManager = user?.role === 'manager';
+  const isAdmin = user?.role === 'admin';
+  const isManager = user?.role === 'manager' || user?.role === 'admin';
   const isWaiter = user?.role === 'waiter';
 
   const value = {
@@ -128,10 +66,10 @@ export const AuthProvider = ({ children }) => {
     token,
     loading,
     isAuthenticated,
+    isAdmin,
     isManager,
     isWaiter,
     login,
-    register,
     logout,
   };
 

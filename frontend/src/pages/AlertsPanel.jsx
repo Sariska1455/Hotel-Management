@@ -1,5 +1,5 @@
 // ============================================================================
-// AlertsPanel Page — Slow order alerts with acknowledge & re-alert logic
+// AlertsPanel Page — Slow order alerts with acknowledge & re-alert logic (Goal 10)
 // ============================================================================
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -26,9 +26,17 @@ const formatAge = (createdAt) => {
 const AlertsPanel = () => {
   const navigate = useNavigate();
   const [slowOrders, setSlowOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = () => {
-    setSlowOrders(orderService.getSlowOrders(30));
+  const refresh = async () => {
+    try {
+      const alerts = await orderService.getSlowOrders();
+      setSlowOrders(alerts);
+    } catch (err) {
+      console.error('Failed to fetch alerts:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -37,9 +45,13 @@ const AlertsPanel = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleAcknowledge = (orderId) => {
-    orderService.acknowledgeAlert(orderId);
-    refresh();
+  const handleAcknowledge = async (orderId) => {
+    try {
+      await orderService.acknowledgeAlert(orderId);
+      refresh();
+    } catch (err) {
+      console.error('Failed to acknowledge alert:', err);
+    }
   };
 
   return (
@@ -66,7 +78,12 @@ const AlertsPanel = () => {
       </div>
 
       {/* Alert Cards */}
-      {slowOrders.length === 0 ? (
+      {loading ? (
+        <div className="loading-center" style={{ padding: '4rem' }}>
+          <div className="spinner" style={{ width: '36px', height: '36px' }} />
+          <p style={{ color: 'var(--text-muted)', marginTop: '12px' }}>Checking alerts...</p>
+        </div>
+      ) : slowOrders.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon-wrap green">
             <BellOff size={36} />

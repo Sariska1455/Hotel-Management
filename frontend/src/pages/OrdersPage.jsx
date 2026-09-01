@@ -1,5 +1,5 @@
 // ============================================================================
-// OrdersPage — Full order list with search, filters, sort, pagination (Goal 6)
+// OrdersPage — Full order list with server-side search, filters, sort, pagination (Goal 6)
 // ============================================================================
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -43,7 +43,6 @@ const OrdersPage = () => {
 
   // UI
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [filterOpen, setFilterOpen] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -56,7 +55,6 @@ const OrdersPage = () => {
         date,
         sortBy,
         sortDir,
-        waiterId: isManager ? '' : String(user?.id || ''),
       });
       setOrders(result.orders);
       setTotal(result.total);
@@ -66,7 +64,7 @@ const OrdersPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, search, status, date, sortBy, sortDir, isManager, user]);
+  }, [page, search, status, date, sortBy, sortDir]);
 
   useEffect(() => {
     fetchOrders();
@@ -91,6 +89,14 @@ const OrdersPage = () => {
     return sortDir === 'asc' ? <SortAsc size={14} /> : <SortDesc size={14} />;
   };
 
+  const handleExportCSV = async () => {
+    try {
+      await orderService.exportOrdersCSV();
+    } catch (err) {
+      console.error('CSV export failed:', err);
+    }
+  };
+
   return (
     <div className="page-container">
       {/* Header */}
@@ -109,7 +115,7 @@ const OrdersPage = () => {
         </div>
         <div className="header-actions">
           {isManager && (
-            <button className="btn-ghost" onClick={() => orderService.exportOrdersCSV()}>
+            <button className="btn-ghost" onClick={handleExportCSV}>
               <Download size={16} />
               Export CSV
             </button>
@@ -223,7 +229,7 @@ const OrdersPage = () => {
                     <div className="table-cell-main">
                       Table <strong>{order.tableNumber}</strong>
                     </div>
-                    <div className="table-cell-sub">{order.id}</div>
+                    <div className="table-cell-sub">#{order.id}</div>
                   </td>
                   <td><StatusBadge status={order.status} size="sm" /></td>
                   <td>
