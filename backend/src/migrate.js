@@ -18,13 +18,32 @@ const runMigrations = async () => {
     const migrationsDir = path.join(__dirname, '../migrations');
     const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
+    await client.query(
+      'CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+    );
+    const schemaCheck = await client.query("SELECT to_regclass('public.users') AS users_table");
+    const hasExistingSchema = schemaCheck.rows[0].users_table !== null;
+
     for (const file of files) {
+      const alreadyApplied = await client.query(
+        'SELECT 1 FROM schema_migrations WHERE filename = $1',
+        [file]
+      );
+      if (alreadyApplied.rowCount > 0) continue;
+
+      // Databases made before migration tracking already contain these changes.
+      if (hasExistingSchema && (file === '001_initial_schema.sql' || file === '002_add_admin_role.sql')) {
+        await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+        console.log(`Recorded existing migration: ${file}`);
+        continue;
+      }
       console.log(`📄 Applying migration: ${file}...`);
       const filePath = path.join(migrationsDir, file);
       const sql = fs.readFileSync(filePath, 'utf8');
 
       // Execute SQL statements
       await client.query(sql);
+      await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
       console.log(`✅ Applied migration: ${file}`);
     }
 

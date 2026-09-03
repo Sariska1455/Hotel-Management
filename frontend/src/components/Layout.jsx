@@ -68,7 +68,7 @@ const Layout = ({ children }) => {
             <Utensils size={20} />
           </div>
           <div className="brand-text">
-            <span className="brand-name">CorkBoard</span>
+            <span className="brand-name">Restora</span>
             <span className="brand-sub">Restaurant System</span>
           </div>
           <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}>
@@ -157,7 +157,7 @@ const Layout = ({ children }) => {
           </button>
           <div className="topbar-brand">
             <Utensils size={16} />
-            <span>CorkBoard</span>
+            <span>Restora</span>
           </div>
           <NavLink to="/alerts" className="topbar-alert-btn">
             <Bell size={20} />

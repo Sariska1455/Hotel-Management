@@ -99,16 +99,11 @@ router.delete('/:id', async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    // Check if user has associated orders or history
-    const hasOrders = await userModel.checkUserOrders(userId);
-    if (hasOrders) {
-      return res.status(400).json({
-        success: false,
-        error: 'Cannot delete this staff member because they have created orders or logged timeline actions in the restaurant audit history.',
-      });
-    }
-
     const deleted = await userModel.deleteUser(userId);
+
+    if (!deleted) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
 
     res.json({
       success: true,

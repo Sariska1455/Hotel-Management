@@ -23,7 +23,19 @@ import {
   Layers
 } from 'lucide-react';
 
-const CATEGORIES = ['All', 'Starters', 'Main Courses', 'Desserts', 'Artisanal Drinks'];
+const CATEGORIES = [
+  'All',
+  'Beverages',
+  'Starters',
+  'Main Course — North Indian',
+  'Rice & Biryani',
+  'Indian Breads',
+  'Thali',
+  'Sides',
+  'Desserts',
+  'Jain Specials',
+];
+
 const formatIndianRupees = (price) => new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR'
@@ -31,11 +43,16 @@ const formatIndianRupees = (price) => new Intl.NumberFormat('en-IN', {
 
 const CategoryIcon = ({ cat }) => {
   switch (cat) {
-    case 'Starters': return <Flame size={16} />;
-    case 'Main Courses': return <Utensils size={16} />;
-    case 'Desserts': return <Coffee size={16} />;
-    case 'Artisanal Drinks': return <Wine size={16} />;
-    default: return <Sparkles size={16} />;
+    case 'Beverages':                 return <Wine size={16} />;
+    case 'Starters':                  return <Flame size={16} />;
+    case 'Main Course — North Indian': return <Utensils size={16} />;
+    case 'Rice & Biryani':            return <Layers size={16} />;
+    case 'Indian Breads':             return <Coffee size={16} />;
+    case 'Thali':                     return <Sparkles size={16} />;
+    case 'Sides':                     return <Check size={16} />;
+    case 'Desserts':                  return <Coffee size={16} />;
+    case 'Jain Specials':             return <Sparkles size={16} />;
+    default:                          return <Sparkles size={16} />;
   }
 };
 

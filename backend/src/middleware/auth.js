@@ -1,8 +1,9 @@
 const jwt = require('jsonwebtoken');
+const userModel = require('../models/userModel');
 
 // Middleware to authenticate the user by verifying their JWT token.
 // Authentication answers "Who are you?".
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -16,9 +17,15 @@ const authenticate = (req, res, next) => {
     // It uses our secret key. If valid, it decodes the payload we embedded earlier.
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    // We attach the decoded payload (like { id, email, role }) to req.user.
-    // This allows subsequent middleware and route handlers to know exactly who made the request.
-    req.user = decoded;
+    // Verify that the account is still active so deleting a user also revokes
+    // any token issued before the deletion.
+    const user = await userModel.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'This account is no longer active.' });
+    }
+
+    // Use the current database role rather than the role embedded in the token.
+    req.user = { id: user.id, email: user.email, role: user.role };
     next();
   } catch (error) {
     res.status(401).json({ success: false, error: 'Invalid token.' });

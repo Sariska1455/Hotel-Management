@@ -1,8 +1,11 @@
 // ============================================================================
-// Seed Data Script — Populates realistic initial data for demo/review
+// Reset & Seed Script — Restora Restaurant Management System
 // ============================================================================
-// Creates: users, menu items, orders across 14 days with varied statuses,
-//          order lines, timeline history, collaborators, notes.
+// This script:
+//   1. Wipes ALL orders, order lines, history, notes, collaborators
+//   2. Wipes ALL existing menu items
+//   3. Keeps admin, manager, and waiter accounts (recreates if missing)
+//   4. Seeds the full Restora menu (pure vegetarian Indian cuisine)
 // ============================================================================
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
@@ -10,237 +13,161 @@ const pool = require('./config/db');
 const bcrypt = require('bcryptjs');
 
 const seedData = async () => {
-  console.log('🌱 Starting Database Seeding...');
+  console.log('🌱 Starting Restora Reset & Seed...');
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Ensure 'admin' role exists in PostgreSQL enum
+    // ── Ensure 'admin' role exists ──────────────────────────────────────────
     try {
       await client.query("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin'");
-    } catch (e) {
-      // Ignore if already added
-    }
+    } catch (e) { /* already exists */ }
 
-    // ---- 1. Users ----
+    // ── 1. WIPE all order-related data (respecting FK order) ───────────────
+    await client.query('DELETE FROM order_history');
+    await client.query('DELETE FROM order_notes');
+    await client.query('DELETE FROM order_collaborators');
+    await client.query('DELETE FROM order_lines');
+    await client.query('DELETE FROM orders');
+    console.log('✅ Cleared all orders and history');
+
+    // ── 2. WIPE all menu items ─────────────────────────────────────────────
+    await client.query('DELETE FROM menu_items');
+    // Reset the sequence so IDs start from 1
+    await client.query("SELECT setval(pg_get_serial_sequence('menu_items', 'id'), 1, false)");
+    console.log('✅ Cleared all menu items');
+
+    // ── 3. Provision core staff accounts (admin + manager + waiter) ────────
     const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash('password123', salt);
+    const defaultHash = await bcrypt.hash('password123', salt);
 
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@restaurant.com';
+    const adminEmail    = process.env.ADMIN_EMAIL    || 'admin@restora.in';
     const adminPassword = process.env.ADMIN_PASSWORD || 'adminPassword123!';
-    const adminHash = await bcrypt.hash(adminPassword, salt);
+    const adminHash     = await bcrypt.hash(adminPassword, salt);
+    const adminName     = process.env.ADMIN_NAME     || 'Restaurant Owner';
 
-    const users = [
-      { email: adminEmail, passwordHash: adminHash, name: process.env.ADMIN_NAME || 'Restaurant Owner', role: 'admin' },
-      { email: 'manager@restaurant.com', passwordHash: hash, name: 'Alice Vance', role: 'manager' },
-      { email: 'waiter@restaurant.com', passwordHash: hash, name: 'Bob Miller', role: 'waiter' },
-      { email: 'waiter2@restaurant.com', passwordHash: hash, name: 'Charlie Davis', role: 'waiter' },
+    const coreUsers = [
+      { email: adminEmail,              passwordHash: adminHash,   name: adminName,        role: 'admin'   },
+      { email: 'manager@restora.in',    passwordHash: defaultHash, name: 'Priya Sharma',   role: 'manager' },
+      { email: 'waiter@restora.in',     passwordHash: defaultHash, name: 'Ravi Kumar',     role: 'waiter'  },
     ];
 
-    const userIds = {};
-    for (const u of users) {
-      const { rows } = await client.query(
+    for (const u of coreUsers) {
+      await client.query(
         `INSERT INTO users (email, password_hash, name, role)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, password_hash = EXCLUDED.password_hash, role = EXCLUDED.role
-         RETURNING id`,
+         ON CONFLICT (email) DO UPDATE
+           SET name = EXCLUDED.name,
+               password_hash = EXCLUDED.password_hash,
+               role = EXCLUDED.role,
+               deleted_at = NULL`,
         [u.email, u.passwordHash, u.name, u.role],
       );
-      userIds[u.email] = rows[0].id;
     }
-    console.log('✅ Seeded users (including Admin from .env)');
+    console.log('✅ Core staff accounts ready (admin, manager, waiter)');
 
-    // ---- 2. Menu Items ----
-    const menuItems = [
-      { name: 'Paneer Tikka', desc: 'Tandoor-roasted cottage cheese with capsicum, onion, and fragrant Indian spices.', cat: 'Starters', price: 320 },
-      { name: 'Samosa Chaat', desc: 'Crisp samosas topped with chickpea curry, yoghurt, tamarind chutney, and sev.', cat: 'Starters', price: 180 },
-      { name: 'Tandoori Chicken', desc: 'Tender chicken marinated in yoghurt and spices, roasted in a traditional clay oven.', cat: 'Starters', price: 360 },
-      { name: 'Butter Chicken', desc: 'Char-grilled chicken in a rich, creamy tomato and fenugreek gravy.', cat: 'Main Courses', price: 420 },
-      { name: 'Paneer Butter Masala', desc: 'Soft paneer cubes in a velvety tomato-cashew gravy with aromatic spices.', cat: 'Main Courses', price: 380 },
-      { name: 'Hyderabadi Veg Biryani', desc: 'Layered basmati rice, seasonal vegetables, saffron, mint, and whole spices; served with raita.', cat: 'Main Courses', price: 340 },
-      { name: 'Dal Makhani', desc: 'Slow-cooked black lentils and kidney beans finished with butter and cream.', cat: 'Main Courses', price: 290 },
-      { name: 'Gulab Jamun', desc: 'Warm milk dumplings soaked in cardamom-scented sugar syrup.', cat: 'Desserts', price: 140 },
-      { name: 'Kesar Kulfi', desc: 'Traditional frozen milk dessert flavoured with saffron, pistachio, and cardamom.', cat: 'Desserts', price: 160 },
-      { name: 'Masala Chai', desc: 'Freshly brewed Indian tea with milk, ginger, cardamom, and warming spices.', cat: 'Artisanal Drinks', price: 90 },
-      { name: 'Mango Lassi', desc: 'A creamy yoghurt drink blended with ripe mango pulp and a touch of cardamom.', cat: 'Artisanal Drinks', price: 150 },
+    // ── 4. Full Restora Menu ───────────────────────────────────────────────
+    const menu = [
+      // ── Beverages ──────────────────────────────────────────────────────
+      { name: 'Masala Chai',        desc: 'Classic Indian spiced tea brewed with ginger, cardamom, and fresh milk.',                                               cat: 'Beverages',               price: 40  },
+      { name: 'Ginger Tea',         desc: 'Strong black tea infused with freshly crushed ginger — warming and invigorating.',                                      cat: 'Beverages',               price: 45  },
+      { name: 'Cold Coffee',        desc: 'Rich blended coffee with chilled milk and ice cream — a café-style classic.',                                            cat: 'Beverages',               price: 90  },
+      { name: 'Sweet Lassi',        desc: 'Thick chilled yoghurt blended with sugar and a pinch of cardamom.',                                                     cat: 'Beverages',               price: 80  },
+      { name: 'Masala Chaas',       desc: 'Salted buttermilk tempered with cumin, green chilli, and fresh coriander — a digestive cooler.',                        cat: 'Beverages',               price: 60  },
+      { name: 'Fresh Lime Soda',    desc: 'Chilled sparkling water with freshly squeezed lime, sugar, and a pinch of black salt.',                                 cat: 'Beverages',               price: 70  },
+      { name: 'Mango Lassi',        desc: 'Creamy yoghurt drink blended with ripe Alphonso mango pulp and a whisper of cardamom.',                                 cat: 'Beverages',               price: 100 },
+
+      // ── Starters ───────────────────────────────────────────────────────
+      { name: 'Paneer Tikka',       desc: 'Tandoor-roasted cottage cheese marinated in spiced yoghurt, served with mint chutney and pickled onion.',              cat: 'Starters',                price: 220 },
+      { name: 'Hara Bhara Kebab',   desc: 'Spinach and pea patties bound with paneer, pan-seared golden, with a coriander dip.',                                  cat: 'Starters',                price: 180 },
+      { name: 'Veg Seekh Kebab',    desc: 'Spiced mixed vegetable and lentil kebabs flame-grilled on skewers; served with green chutney.',                         cat: 'Starters',                price: 190 },
+      { name: 'Chilli Paneer',      desc: 'Indo-Chinese crispy cottage cheese tossed with capsicum, onion, soy, and chilli sauce.',                                cat: 'Starters',                price: 210 },
+      { name: 'Crispy Corn',        desc: 'Sweet corn kernels fried golden, tossed with spices, lime, and chopped herbs.',                                         cat: 'Starters',                price: 170 },
+      { name: 'Veg Manchurian',     desc: 'Crispy vegetable dumplings in a tangy, spicy Manchurian sauce — a crowd favourite.',                                    cat: 'Starters',                price: 180 },
+      { name: 'Tandoori Mushroom',  desc: 'Button mushrooms marinated in spiced yoghurt and roasted in a clay oven; served with chutney.',                         cat: 'Starters',                price: 220 },
+      { name: 'Dahi Ke Kebab',      desc: 'Melt-in-the-mouth hung curd kebabs with cashew and raisin filling; lightly pan-seared.',                               cat: 'Starters',                price: 200 },
+
+      // ── Main Course — North Indian ──────────────────────────────────────
+      { name: 'Paneer Butter Masala',   desc: 'Soft paneer in a velvety tomato-cashew gravy with butter and cream — the timeless Punjabi classic.',              cat: 'Main Course — North Indian', price: 240 },
+      { name: 'Shahi Paneer',           desc: 'Cottage cheese in a rich, aromatic Mughlai-style gravy of cashew, cream, and whole spices.',                      cat: 'Main Course — North Indian', price: 230 },
+      { name: 'Kadai Paneer',           desc: 'Paneer and capsicum stir-fried in a robust kadai spice blend of coriander, cumin, and Kashmiri chilli.',           cat: 'Main Course — North Indian', price: 240 },
+      { name: 'Palak Paneer',           desc: 'Creamed spinach gravy with soft paneer cubes, tempered with garlic and a touch of cream.',                         cat: 'Main Course — North Indian', price: 230 },
+      { name: 'Paneer Tikka Masala',    desc: 'Tandoor-charred paneer tikka finished in a smoky, spiced tomato-onion masala gravy.',                              cat: 'Main Course — North Indian', price: 250 },
+      { name: 'Dal Makhani',            desc: 'Black lentils slow-cooked overnight on charcoal, finished with pure ghee and aged cream.',                         cat: 'Main Course — North Indian', price: 190 },
+      { name: 'Dal Tadka',              desc: 'Yellow lentils tempered with ghee, cumin, dried red chilli, garlic, and fresh coriander.',                         cat: 'Main Course — North Indian', price: 160 },
+      { name: 'Chole Masala',           desc: 'Amritsari-style chickpeas slow-cooked in a robust spiced gravy with fried onion and tea-leaf depth.',              cat: 'Main Course — North Indian', price: 170 },
+      { name: 'Rajma Masala',           desc: 'Hearty kidney beans in a tangy, deeply spiced tomato-onion gravy — comfort food at its finest.',                   cat: 'Main Course — North Indian', price: 180 },
+      { name: 'Mix Veg Curry',          desc: 'Seasonal vegetables simmered in a home-style masala gravy with fresh tomatoes and whole spices.',                  cat: 'Main Course — North Indian', price: 190 },
+      { name: 'Veg Kolhapuri',          desc: 'Fiery Maharashtrian-style mixed vegetables in a bold coconut-based masala paste.',                                 cat: 'Main Course — North Indian', price: 210 },
+      { name: 'Malai Kofta',            desc: 'Delicate paneer and potato dumplings in a mild, creamy tomato-cashew sauce.',                                      cat: 'Main Course — North Indian', price: 240 },
+
+      // ── Rice & Biryani ─────────────────────────────────────────────────
+      { name: 'Steamed Rice',       desc: 'Fluffy long-grain basmati rice steamed to perfection — pairs with any curry.',                                          cat: 'Rice & Biryani',          price: 120 },
+      { name: 'Jeera Rice',         desc: 'Fragrant basmati rice tempered with cumin seeds and a touch of ghee.',                                                  cat: 'Rice & Biryani',          price: 140 },
+      { name: 'Veg Pulao',          desc: 'Basmati rice cooked with seasonal vegetables and whole spices in a light vegetable stock.',                             cat: 'Rice & Biryani',          price: 160 },
+      { name: 'Veg Biryani',        desc: 'Slow-dum cooked basmati rice layered with spiced vegetables, saffron, and fried onion; served with raita.',            cat: 'Rice & Biryani',          price: 220 },
+      { name: 'Paneer Biryani',     desc: 'Fragrant dum biryani with marinated paneer tikka, caramelised onion, and fresh mint.',                                  cat: 'Rice & Biryani',          price: 250 },
+      { name: 'Kashmiri Pulao',     desc: 'Saffron rice cooked with dried fruits, nuts, and aromatic Kashmiri spices — mildly sweet and fragrant.',               cat: 'Rice & Biryani',          price: 200 },
+
+      // ── Indian Breads ──────────────────────────────────────────────────
+      { name: 'Tandoori Roti',      desc: 'Whole wheat flatbread baked in a clay oven — light, slightly charred, and wholesome.',                                  cat: 'Indian Breads',           price: 25  },
+      { name: 'Butter Roti',        desc: 'Soft whole wheat roti brushed generously with salted butter, straight off the tawa.',                                   cat: 'Indian Breads',           price: 35  },
+      { name: 'Plain Naan',         desc: 'Leavened white bread baked in a traditional tandoor — pillowy and slightly charred.',                                   cat: 'Indian Breads',           price: 50  },
+      { name: 'Butter Naan',        desc: 'Soft tandoor-baked naan slathered with rich salted butter.',                                                            cat: 'Indian Breads',           price: 60  },
+      { name: 'Garlic Naan',        desc: 'Tandoor naan topped with roasted garlic, butter, and fresh coriander.',                                                 cat: 'Indian Breads',           price: 80  },
+      { name: 'Cheese Naan',        desc: 'Tandoor naan stuffed with melted processed cheese — indulgent and crowd-pleasing.',                                     cat: 'Indian Breads',           price: 110 },
+      { name: 'Laccha Paratha',     desc: 'Multi-layered whole wheat paratha brushed with ghee — flaky, buttery, and served piping hot.',                          cat: 'Indian Breads',           price: 70  },
+      { name: 'Stuffed Aloo Paratha', desc: 'Whole wheat paratha stuffed with spiced mashed potato, served with white butter and pickle.',                        cat: 'Indian Breads',           price: 100 },
+
+      // ── Thali ──────────────────────────────────────────────────────────
+      { name: 'Mini Veg Thali',     desc: 'A wholesome mini thali — 1 vegetable, dal, rice, 1 roti, and a small sweet.',                                          cat: 'Thali',                   price: 180 },
+      { name: 'Punjabi Thali',      desc: 'A hearty Punjabi spread — 2 vegetables, dal makhani, rice, 2 rotis, salad, raita, and papad.',                         cat: 'Thali',                   price: 280 },
+      { name: 'Special Veg Thali',  desc: '2 vegetables, dal, rice, 2 rotis, salad, raita, papad, sweet & pickle — the complete Restora experience.',             cat: 'Thali',                   price: 350 },
+      { name: 'Jain Thali',         desc: 'A no-root-vegetable thali — 2 Jain curries, Jain dal, rice, 2 rotis, papad, and a sweet.',                            cat: 'Thali',                   price: 300 },
+
+      // ── Sides ──────────────────────────────────────────────────────────
+      { name: 'Boondi Raita',       desc: 'Chilled yoghurt with crispy boondi pearls, cumin, and fresh coriander.',                                               cat: 'Sides',                   price: 90  },
+      { name: 'Mix Veg Raita',      desc: 'Fresh yoghurt with grated cucumber, carrot, and beetroot; lightly spiced with roasted cumin.',                          cat: 'Sides',                   price: 100 },
+      { name: 'Green Salad',        desc: 'Crisp cucumber, tomato, onion, and carrot with a lemon-chaat masala dressing.',                                         cat: 'Sides',                   price: 80  },
+      { name: 'Onion Salad',        desc: 'Thinly sliced onion rings with lemon juice, green chilli, and a dash of chaat masala.',                                 cat: 'Sides',                   price: 50  },
+      { name: 'Roasted Papad',      desc: 'Crispy urad dal papad roasted over an open flame — light and addictive.',                                               cat: 'Sides',                   price: 30  },
+      { name: 'Masala Papad',       desc: 'Roasted papad topped with chopped tomato, onion, green chilli, and a drizzle of tamarind chutney.',                    cat: 'Sides',                   price: 60  },
+
+      // ── Desserts ───────────────────────────────────────────────────────
+      { name: 'Gulab Jamun (2 pcs)',   desc: 'Warm soft khoya dumplings soaked in cardamom and rose water syrup; served with a scoop of ice cream.',              cat: 'Desserts',                price: 80  },
+      { name: 'Rasmalai (2 pcs)',      desc: 'Soft cottage cheese patties soaked in chilled saffron-cardamom milk; garnished with pistachios.',                   cat: 'Desserts',                price: 120 },
+      { name: 'Gajar Ka Halwa',        desc: 'Slow-cooked carrot pudding with pure ghee, milk, sugar, and crushed cardamom; garnished with cashews.',             cat: 'Desserts',                price: 110 },
+      { name: 'Kesar Kulfi',           desc: 'Traditional frozen milk dessert flavoured with saffron, pistachio, and cardamom — denser and richer than ice cream.', cat: 'Desserts',             price: 100 },
+      { name: 'Rabri',                 desc: 'Thickened reduced milk sweetened with sugar and cardamom; served chilled with slivered almonds and rose petals.',   cat: 'Desserts',                price: 130 },
+      { name: 'Moong Dal Halwa',       desc: 'Rich and aromatic split moong dal slow-cooked in ghee with sugar, saffron, and dry fruits — a Rajasthani gem.',    cat: 'Desserts',                price: 120 },
+
+      // ── Jain Specials ──────────────────────────────────────────────────
+      { name: 'Jain Paneer Masala',    desc: 'No-onion, no-garlic, no-root-vegetable cottage cheese curry in a spiced tomato-cashew gravy.',                      cat: 'Jain Specials',           price: 240 },
+      { name: 'Jain Mix Veg',          desc: 'Seasonal above-ground vegetables cooked in a Jain-approved spiced tomato gravy — pure and flavourful.',             cat: 'Jain Specials',           price: 200 },
+      { name: 'Jain Dal Tadka',        desc: 'Yellow lentils tempered with ghee and cumin, strictly no onion or garlic — clean and wholesome.',                   cat: 'Jain Specials',           price: 170 },
+      { name: 'Jain Veg Biryani',      desc: 'Aromatic dum biryani prepared without onion, garlic, or root vegetables — lightly spiced and fragrant.',            cat: 'Jain Specials',           price: 220 },
+      { name: 'Jain Special Thali',    desc: 'Complete Jain meal — 2 Jain curries, Jain dal, rice, 2 rotis, papad, raita (no onion/garlic/root veg).',           cat: 'Jain Specials',           price: 300 },
     ];
 
-    const menuIds = {};
-    for (const item of menuItems) {
-      const { rows } = await client.query(
+    for (const item of menu) {
+      await client.query(
         `INSERT INTO menu_items (name, description, category, price, is_available)
-         VALUES ($1, $2, $3, $4, true)
-         ON CONFLICT DO NOTHING
-         RETURNING id`,
+         VALUES ($1, $2, $3, $4, true)`,
         [item.name, item.desc, item.cat, item.price],
       );
-      if (rows.length > 0) {
-        menuIds[item.name] = rows[0].id;
-      } else {
-        // Already exists, fetch id
-        const { rows: existing } = await client.query(
-          'SELECT id FROM menu_items WHERE name = $1', [item.name],
-        );
-        menuIds[item.name] = existing[0]?.id;
-      }
     }
-    console.log(`✅ Seeded ${menuItems.length} menu items`);
+    console.log(`✅ Seeded ${menu.length} menu items across 9 categories`);
 
-    // ---- 3. Demo Orders (spread across 14 days) ----
-    const managerId = userIds['manager@restaurant.com'];
-    const bobId = userIds['waiter@restaurant.com'];
-    const charlieId = userIds['waiter2@restaurant.com'];
-
-    // Helper to build timestamped orders
-    const daysAgo = (d, h = 12, m = 0) => {
-      const dt = new Date();
-      dt.setDate(dt.getDate() - d);
-      dt.setHours(h, m, 0, 0);
-      return dt.toISOString();
-    };
-
-    // Order definitions: spread across 14 days for chart data
-    const orderDefs = [
-      // --- Today: 3 orders (1 placed, 1 preparing, 1 served) ---
-      { table: '3', waiter: bobId, status: 'served', daysAgo: 0, h: 10, items: [['Butter Chicken', 2], ['Masala Chai', 2]], note: 'Guests loved the butter chicken' },
-      { table: '7', waiter: bobId, status: 'preparing', daysAgo: 0, h: 11, items: [['Paneer Tikka', 1], ['Paneer Butter Masala', 2]], collabs: [charlieId] },
-      { table: '12', waiter: charlieId, status: 'placed', daysAgo: 0, h: 12, items: [['Tandoori Chicken', 1], ['Samosa Chaat', 2]], note: 'VIP table — rush please' },
-
-      // --- Yesterday: 3 served ---
-      { table: '1', waiter: bobId, status: 'served', daysAgo: 1, h: 13, items: [['Butter Chicken', 1], ['Dal Makhani', 1], ['Masala Chai', 3]] },
-      { table: '5', waiter: charlieId, status: 'served', daysAgo: 1, h: 14, items: [['Hyderabadi Veg Biryani', 2], ['Gulab Jamun', 2]] },
-      { table: '9', waiter: charlieId, status: 'cancelled', daysAgo: 1, h: 15, items: [['Paneer Tikka', 2]], note: 'Guest left early' },
-
-      // --- 2 days ago: 2 served ---
-      { table: '2', waiter: bobId, status: 'served', daysAgo: 2, h: 12, items: [['Samosa Chaat', 3], ['Tandoori Chicken', 2], ['Masala Chai', 4]] },
-      { table: '4', waiter: charlieId, status: 'served', daysAgo: 2, h: 18, items: [['Paneer Butter Masala', 1], ['Kesar Kulfi', 2]] },
-
-      // --- 3 days ago: 3 served ---
-      { table: '6', waiter: bobId, status: 'served', daysAgo: 3, h: 11, items: [['Butter Chicken', 3], ['Paneer Tikka', 2]] },
-      { table: '8', waiter: charlieId, status: 'served', daysAgo: 3, h: 13, items: [['Dal Makhani', 2], ['Mango Lassi', 3]] },
-      { table: '10', waiter: bobId, status: 'served', daysAgo: 3, h: 19, items: [['Hyderabadi Veg Biryani', 1], ['Gulab Jamun', 2]] },
-
-      // --- 4 days ago: 2 served ---
-      { table: '1', waiter: charlieId, status: 'served', daysAgo: 4, h: 12, items: [['Tandoori Chicken', 2], ['Masala Chai', 2]] },
-      { table: '3', waiter: bobId, status: 'served', daysAgo: 4, h: 14, items: [['Paneer Butter Masala', 3], ['Samosa Chaat', 1]] },
-
-      // --- 5 days ago: 1 served ---
-      { table: '5', waiter: bobId, status: 'served', daysAgo: 5, h: 13, items: [['Butter Chicken', 2], ['Kesar Kulfi', 2], ['Masala Chai', 2]] },
-
-      // --- 6 days ago: 3 served ---
-      { table: '2', waiter: charlieId, status: 'served', daysAgo: 6, h: 12, items: [['Dal Makhani', 1], ['Mango Lassi', 2]] },
-      { table: '7', waiter: bobId, status: 'served', daysAgo: 6, h: 15, items: [['Paneer Tikka', 1], ['Tandoori Chicken', 1]] },
-      { table: '4', waiter: charlieId, status: 'served', daysAgo: 6, h: 18, items: [['Hyderabadi Veg Biryani', 2]] },
-
-      // --- 7 days ago: 2 served ---
-      { table: '9', waiter: bobId, status: 'served', daysAgo: 7, h: 13, items: [['Butter Chicken', 1], ['Gulab Jamun', 3]] },
-      { table: '6', waiter: charlieId, status: 'served', daysAgo: 7, h: 17, items: [['Paneer Butter Masala', 2], ['Masala Chai', 4]] },
-
-      // --- 8–13 days ago: 1-2 served each to fill chart ---
-      { table: '1', waiter: bobId, status: 'served', daysAgo: 8, h: 12, items: [['Tandoori Chicken', 1], ['Dal Makhani', 1]] },
-      { table: '3', waiter: charlieId, status: 'served', daysAgo: 9, h: 14, items: [['Samosa Chaat', 2], ['Masala Chai', 2]] },
-      { table: '5', waiter: bobId, status: 'served', daysAgo: 9, h: 18, items: [['Butter Chicken', 2]] },
-      { table: '2', waiter: charlieId, status: 'served', daysAgo: 10, h: 13, items: [['Paneer Tikka', 2], ['Mango Lassi', 1]] },
-      { table: '7', waiter: bobId, status: 'served', daysAgo: 11, h: 12, items: [['Hyderabadi Veg Biryani', 1], ['Gulab Jamun', 2]] },
-      { table: '4', waiter: charlieId, status: 'served', daysAgo: 12, h: 14, items: [['Butter Chicken', 1], ['Kesar Kulfi', 1]] },
-      { table: '8', waiter: bobId, status: 'served', daysAgo: 13, h: 11, items: [['Tandoori Chicken', 2], ['Masala Chai', 3]] },
-    ];
-
-    // Lifecycle steps per status
-    const lifecycleSteps = {
-      placed: ['placed'],
-      accepted: ['placed', 'accepted'],
-      preparing: ['placed', 'accepted', 'preparing'],
-      ready: ['placed', 'accepted', 'preparing', 'ready'],
-      served: ['placed', 'accepted', 'preparing', 'ready', 'served'],
-      cancelled: ['placed', 'cancelled'],
-    };
-
-    for (const def of orderDefs) {
-      const createdAt = daysAgo(def.daysAgo, def.h, 0);
-      const steps = lifecycleSteps[def.status];
-
-      // Insert order at initial "placed" status, then update to final
-      const { rows: [order] } = await client.query(
-        `INSERT INTO orders (table_number, status, primary_waiter_id, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $4) RETURNING id`,
-        [def.table, def.status, def.waiter, createdAt],
-      );
-
-      // Insert order lines
-      for (const [itemName, qty] of def.items) {
-        const menuId = menuIds[itemName];
-        const price = menuItems.find(m => m.name === itemName)?.price || 0;
-        if (menuId) {
-          await client.query(
-            `INSERT INTO order_lines (order_id, menu_item_id, quantity, unit_price, created_at)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [order.id, menuId, qty, price, createdAt],
-          );
-        }
-      }
-
-      // Insert timeline history
-      let prevStatus = null;
-      for (let i = 0; i < steps.length; i++) {
-        const stepTime = new Date(new Date(createdAt).getTime() + i * 10 * 60000).toISOString();
-        const actor = i === 0 ? def.waiter : managerId;
-        await client.query(
-          `INSERT INTO order_history (order_id, action, old_value, new_value, details, performed_by, created_at)
-           VALUES ($1, 'status_change', $2, $3, $4, $5, $6)`,
-          [
-            order.id,
-            prevStatus,
-            steps[i],
-            JSON.stringify({ old_status: prevStatus, new_status: steps[i] }),
-            actor,
-            stepTime,
-          ],
-        );
-        prevStatus = steps[i];
-      }
-
-      // Add collaborators
-      if (def.collabs) {
-        for (const collabId of def.collabs) {
-          await client.query(
-            'INSERT INTO order_collaborators (order_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-            [order.id, collabId],
-          );
-          await client.query(
-            `INSERT INTO order_history (order_id, action, details, performed_by, created_at)
-             VALUES ($1, 'collaborator_added', $2, $3, $4)`,
-            [
-              order.id,
-              JSON.stringify({ collaborator_id: collabId, collaborator_name: users.find(u => userIds[u.email] === collabId)?.name }),
-              def.waiter,
-              createdAt,
-            ],
-          );
-        }
-      }
-
-      // Add notes
-      if (def.note) {
-        await client.query(
-          'INSERT INTO order_notes (order_id, content, created_by, created_at) VALUES ($1, $2, $3, $4)',
-          [order.id, def.note, def.waiter, createdAt],
-        );
-        await client.query(
-          `INSERT INTO order_history (order_id, action, details, performed_by, created_at)
-           VALUES ($1, 'note_added', $2, $3, $4)`,
-          [order.id, JSON.stringify({ note: def.note }), def.waiter, createdAt],
-        );
-      }
-    }
-    console.log(`✅ Seeded ${orderDefs.length} demo orders with history`);
+    // ── 5. No demo orders — day one fresh ─────────────────────────────────
+    console.log('ℹ️  No demo orders — Restora opens clean today.');
 
     await client.query('COMMIT');
-    console.log('🎉 Seeding complete!');
+    console.log('🎉 Restora reset complete! Brand new, ready to serve.');
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('❌ Seeding failed:', err);
+    console.error('❌ Reset failed:', err);
+    process.exit(1);
   } finally {
     client.release();
     pool.end();

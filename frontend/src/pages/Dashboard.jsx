@@ -48,7 +48,7 @@ const Dashboard = () => {
             </div>
             <div>
               <div style={{ fontFamily: "'Playfair Display', serif", fontWeight: '700', fontSize: '1.15rem', color: '#ffffff' }}>
-                CorkBoard
+                Restora
               </div>
               <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '1px', color: '#fbbf24', fontWeight: '600' }}>
                 Restaurant System

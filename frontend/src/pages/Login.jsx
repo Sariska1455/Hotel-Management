@@ -63,7 +63,7 @@ const Login = () => {
         <div className="auth-brand">
           <div className="brand-badge">
             <Sparkles size={14} />
-            <span>CorkBoard RMS</span>
+            <span>Restora RMS</span>
           </div>
           <h1 className="auth-title">Welcome Back</h1>
           <p className="auth-subtitle">
