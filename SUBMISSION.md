@@ -3,53 +3,54 @@
 ## Links
 
 - **GitHub repository:** https://github.com/Sariska1455/Hotel-Management
-- **Live application:** <deployed URL>
+- **Live application:** https://hotel-management-five-coral.vercel.app
 
 ## Notes for the reviewer
 
-- **Seeded data:** The database is pre-seeded with realistic data including multiple users (1 Manager, 2 Waiters), 11 menu items across 4 categories, and 27 realistic orders spanning the past 14 days with full lifecycle histories, price snapshots, voided lines, notes, and collaborators.
-- **Quick Demo Login:** On the login page, you can click the quick-login pills for **Manager Demo** or **Waiter Demo** to auto-populate credentials instantly.
-- **Single-service deployment ready:** The backend server (`server.js`) can serve the built frontend assets (`frontend/dist`) directly when running in production, or both can be hosted independently.
+- **Dynamic Staff Management (Restaurant Owner Role):** Instead of relying on hardcoded demo staff credentials, I introduced an additional administrative role: the **Restaurant Owner (Admin)**. The Owner has access to a dedicated Staff Management portal (`/staff`) to dynamically create and delete credentials for Managers and Waiters directly in PostgreSQL with Bcrypt password hashing. Soft deletion (`deleted_at`) is implemented so deactivating staff never breaks historical order foreign keys or audit trail attribution.
+- **Real Deployed Data:** The deployed server is live with 10 catalog dishes across categories (Starters, Mains, Desserts, Beverages) and live orders tested over the course of 1 day across the full order lifecycle (Placed → Accepted → Preparing → Ready → Served / Cancelled), complete with price snapshots, voided items with reasons, notes, and multi-waiter collaborations.
+- **Free-Tier Host Note:** The backend is hosted on Render's free tier. If the service has been idle, the initial API call may take approximately 30–50 seconds to wake up the container. Once spun up, requests are fast and responsive.
 
 ## Demo credentials
 
-| Role | Email | Password |
-|------|-------|----------|
-| Manager | manager@restaurant.com | password123 |
-| Waiter 1 (Bob) | waiter@restaurant.com | password123 |
-| Waiter 2 (Charlie) | waiter2@restaurant.com | password123 |
+| Role | Email | Password | What this account does |
+|------|-------|----------|------------------------|
+| **Owner (Admin)** | `admin@restaurant.com` | `adminPassword123!` | Manages staff credentials; creates and deactivates Manager and Waiter accounts. |
+| **Manager** | `manager@restaurant.com` | `Sariska` | Full menu management, bulk pricing/availability actions, views all orders, archives orders, views full analytics dashboard. |
+| **Waiter 1 (Khushi)** | `waiter1@restaurant.com` | `Khushi` | Creates orders, adds lines, advances order lifecycle, voids lines with reasons, collaborates with other waiters. |
+| **Waiter 2 (Happy)** | `waiter2@restaurant.com` | `Happy` | Collaborator on shared tables; creates and manages assigned floor orders. |
 
 ## Stack
 
-| Layer | What you used | Why |
+| Layer | What was used | Why |
 |-------|---------------|-----|
-| Frontend | React 18, Vite, Recharts, Lucide Icons, Vanilla CSS | Rapid rendering, type-safe API consumption, clean glassmorphism UI without framework lock-in, interactive analytics charts |
-| Backend | Node.js, Express, JWT, express-validator, bcryptjs | Lightweight, fast asynchronous I/O, robust middleware architecture for authentication & role-based authorization |
-| Database | PostgreSQL (pg pool, raw parameterized SQL) | ACID compliance, transactions (`BEGIN`/`COMMIT`/`ROLLBACK`) for lifecycle & history integrity, parameterized queries preventing SQL injection, native date/time interval arithmetic for slow order alerts |
-| Hosting | Node.js / Docker ready (e.g. Render / Railway / Supabase Postgres) | Zero-friction deployment with unified build/start scripts |
+| Frontend | React 18, Vite, Recharts, Lucide Icons, Vanilla CSS | Fast HMR, clean glassmorphic aesthetic without CSS framework bloat, responsive interactive order management, real-time analytics charts. |
+| Backend | Node.js, Express, JWT, express-validator, bcryptjs | Asynchronous, lightweight REST API architecture with declarative middleware for JWT authentication and strict role-based authorization guards. |
+| Database | PostgreSQL (`pg` connection pool, raw parameterized SQL) | Relational ACID compliance, explicit transaction boundaries (`BEGIN` / `FOR UPDATE` / `COMMIT`), strict `CHECK` constraints, custom ENUMs, and native interval arithmetic for slow order alerts. |
+| Hosting | Vercel (Frontend) + Render (Backend) + Cloud PostgreSQL | Reliable distributed cloud deployment with environment-isolated secrets and clean SPA routing. |
 
 ## Goal checklist
 
 | # | Goal | Status | Notes |
 |---|------|--------|-------|
-| 1 | Accounts and roles | Done | Role-based authorization enforced strictly on server (`authenticate` & `authorize('manager')` middlewares). Waiters cannot edit menu items or act on other waiters' orders unless added as collaborators. |
-| 2 | Orders | Done | Orders created by table number. Primary waiter assigned on creation. Orders can be archived/restored by managers without destroying history. |
-| 3 | Order lines | Done | Order lines record menuItemId, quantity, special instructions, and snapshot `unit_price` at the moment of addition. Running total computed server-side from non-voided items. Lines can be added anytime before order is Served. |
-| 4 | Order lifecycle with rules | Done | State machine enforced: Placed → Accepted → Preparing → Ready → Served. Cancellation only permitted when Placed or Accepted. Voiding lines requires a non-empty reason and is permitted anytime before Served/Cancelled; voided lines are preserved with reasons. |
-| 5 | Collaborators | Done | Primary waiter or managers can add/remove collaborators. Waiter order list automatically scopes to orders where they are primary or collaborator. |
-| 6 | Finding orders | Done | Complete server-side filtering (search by table/waiter/ID, status, waiter, date), server-side sorting (by placed time, table, status), and server-side pagination with total count. |
-| 7 | Acting on many menu items at once | Done | Bulk updates to prices and availability return per-item reports showing `success` or `rejected` with descriptive reasons (e.g., negative price, exceeding limit). Includes CSV export of today's orders. |
-| 8 | A dashboard | Done | Server-computed headline numbers (Open orders, Orders today, Served today, Revenue today), status distribution, waiter revenue leaderboard, and 14-day orders/revenue trend chart. |
-| 9 | History you cannot rewrite | Done | Append-only `order_history` table records every status transition (with old/new values), line added, line voided (with reason), note added, and collaborator modification. No update/delete endpoints exist for history. |
-| 10 | Slow-order alerts | Done | Server queries orders open > 30 mins not reaching Ready. Real-time alert count badge in navigation. Acknowledging an alert suppresses it for 15 minutes via `alert_acknowledgements` table before re-triggering. |
+| 1 | Accounts and roles | Done | Three distinct roles (Owner, Manager, Waiter) enforced strictly on the server via `authenticate` and `authorize(...)` middlewares. Waiters cannot edit menu items, change prices, or access orders outside their assigned floor or collaborations. The Owner dynamically manages staff credentials in PostgreSQL. |
+| 2 | Orders | Done | Orders are created by table number with the primary waiter automatically assigned on creation. Managers can archive and restore tickets without destroying historical data. |
+| 3 | Order lines | Done | 10 menu items currently active in catalog. Each order line captures `menu_item_id`, quantity, special instructions, and snapshots `unit_price` at the moment of addition. Running totals are computed server-side from active (non-voided) lines. Lines can be appended anytime before the order reaches Served. |
+| 4 | Order lifecycle with rules | Done | Finite state machine enforced on the backend: Placed → Accepted → Preparing → Ready → Served. Cancellation is strictly limited to Placed or Accepted states. Any line can be voided with a mandatory text reason while the order remains open; voided lines remain preserved in the record for auditability. |
+| 5 | Collaborators | Done | The primary waiter or a manager can add and remove collaborating waiters. Waiters automatically see a scoped order list displaying all orders where they are the primary waiter or registered collaborator. |
+| 6 | Finding orders | Done | Fully server-side SQL execution for search (table number, waiter name), multi-criteria filtering (status, waiter, date), multi-column sorting (creation time, table, status), and offset pagination with total matching record counts. Zero client-side array filtering. |
+| 7 | Acting on many menu items at once | Done | Bulk updates to menu item prices and availability report per-item results (`success` vs. `rejected` with descriptive reasons like negative price) rather than failing the entire batch. Includes CSV export streaming today's orders with line summaries, totals, and statuses. |
+| 8 | A dashboard | Done | Server-computed headline metrics: open orders, orders placed today, orders served today, and revenue today. Includes status distribution breakdowns, waiter revenue leaderboards, and an interactive 14-day chronological orders trend chart. |
+| 9 | History you cannot rewrite | Done | Append-only `order_history` table records every lifecycle transition (with previous and new values), line additions, line voidings (with required reasons), notes, and collaborator changes. No update or delete endpoints exist for audit records. |
+| 10 | Slow-order alerts | Done | Server evaluates orders open > 30 minutes that have not reached Ready using PostgreSQL interval arithmetic. Includes an alert counter badge in the navigation. Acknowledging an alert suppresses it for 15 minutes via `alert_acknowledgements` before automatically re-triggering. |
 
 ## How much time did you actually spend?
-Approximately 10–11 hours total, prioritizing server-side security, relational database design with transaction safety, and a polished user interface.
+
+Approximately 12 hours total, spread across backend architecture, relational schema design with transaction isolation, developing the dynamic Owner staff management feature, testing the application over 1 day on the live deployment, and writing thorough engineering documentation.
 
 ## What would you do next, with another 12 hours?
-1. Real-time WebSocket or Server-Sent Events (SSE) push updates so kitchen state and alerts reflect instantly without polling.
-2. Kitchen Display Screen (KDS) mode with large cards and kitchen station filtering (e.g., grill vs. salad station).
-3. Split-billing and receipt printing / PDF export.
+I will further test the website for its proper functioning as instead of quantity of different features I will focus on the quality of existing ones. 
 
 ## What are you least happy with in this codebase, and why?
-Polling intervals (15s for alerts, 30s for order status) are simple and robust, but a bidirectional WebSocket connection (e.g., Socket.io) would provide sub-second updates for busy dinner services.
+
+While periodic HTTP polling (15s for alerts, 30s for order detail views) is robust, stateless, and free-tier friendly, true real-time WebSockets would eliminate polling latency during high-speed dinner rushes. Additionally, the cold-start delay (~40s) on Render's free tier can be noticeable on the first request after idle time.
